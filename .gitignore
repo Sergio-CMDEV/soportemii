@@ -1,0 +1,4 @@
+*.psd
+
+# Config local del editor / Claude Code
+.claude/

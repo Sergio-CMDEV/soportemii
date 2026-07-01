@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soporte AI — Agente de voz autónomo</title>
+
+  <meta name="description" content="Cómo construí un agente de voz autónomo que contesta llamadas reales en español y confirma reservas por WhatsApp, usando n8n, Vapi, Twilio y un homelab en Proxmox.">
+  <meta name="author" content="Sergio CM">
+  <meta name="keywords" content="IA, agente de voz, n8n, Vapi, Twilio, Deepgram, ElevenLabs, Proxmox, homelab, automatización, WhatsApp">
+
+  <!-- Open Graph / redes sociales -->
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Soporte AI — Agente de voz autónomo">
+  <meta property="og:description" content="Un agente de voz que contesta llamadas reales en español y confirma reservas por WhatsApp, self-hosted en Proxmox.">
+  <meta property="og:image" content="assets/images/vapi-settings.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Favicon + Apple touch icon -->
+  <link rel="icon" href="assets/images/favicon.gif" type="image/gif">
+  <link rel="icon" href="assets/images/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/images/favicon.png">
+
+  <!-- Fuentes combinadas en una sola petición -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital@0;1&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400&display=swap">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="soporte-mii.css">
+  <script src="https://cdn.jsdelivr.net/npm/gifuct-js@1.0.2/dist/gifuct.min.js" defer></script>
+
+  <!-- Schema.org (Article) para SEO enriquecido -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Soporte AI — Agente de voz autónomo",
+    "description": "Cómo construí un agente de voz autónomo que contesta llamadas reales en español y confirma reservas por WhatsApp, usando n8n, Vapi, Twilio y un homelab en Proxmox.",
+    "inLanguage": "es",
+    "image": "assets/images/vapi-settings.png",
+    "datePublished": "2026-06-01",
+    "author": { "@type": "Person", "name": "Sergio CM", "email": "sergio.cm.dev@outlook.com" },
+    "publisher": { "@type": "Person", "name": "Sergio CM" },
+    "keywords": "IA, agente de voz, n8n, Vapi, Twilio, Proxmox, homelab, automatización, WhatsApp"
+  }
+  </script>
+</head>
+<body>
+
+<a class="skip-link" href="#main" data-en="Skip to content">Saltar al contenido</a>
+
+<header>
+  <div class="header-pretitle" data-en="Personal project · June 2026">Proyecto personal · Junio 2026</div>
+  <h1>Soporte AI</h1>
+  <p class="header-subtitle" data-en="How I built an autonomous voice agent that answers real phone calls, understands requests in Spanish and confirms bookings over WhatsApp with no human intervention.">Cómo construí un agente de voz autónomo que contesta llamadas telefónicas reales, entiende peticiones en español y confirma reservas por WhatsApp sin intervención humana.</p>
+  <div class="header-meta">
+    <span>Sergio CM</span>
+    <span data-en="DAM developer">DAM developer</span>
+    <span data-en="Stack: Proxmox, n8n, Vapi, Twilio">Stack: Proxmox, n8n, Vapi, Twilio</span>
+  </div>
+</header>
+
+<div class="container">
+<article id="main" role="main" tabindex="-1">
+
+<p class="intro" data-en="Over the past few months I've been watching my mother work as a receptionist at a small local business. I saw how stressful it could often be to take a booking, and I thought: how hard could it be to build a voice agent that simplifies the booking process and speeds up communication with customers. So I got to work and built a system that fully automates phone-based booking management, using artificial intelligence and my own homelab.">Durante estos últimos meses he estado viendo a mi madre trabajando como recepcionista en un pequeño negocio local. Obsevé
+  cómo podia ser agobiante muchas veces coger una cita y pense, que ten dificil podria ser hacer un agente de voz que simplificara el proceso de reservas y
+  agilice la comunicacion con los clientes. Asi que me puse manos a la obra y construí un sistema que automatiza completamente la gestión de reservas por teléfono,
+  utilizando inteligencia artificial y mi propio homelab.</p>
+
+<h2 data-en="Why I built this">Por qué hice esto</h2>
+
+<p data-en="I've been running my homelab on Proxmox for years —I have an Intel i3-12100F with several LXC containers in production. One of my ongoing projects has always been finding ways to automate real processes. The process is simple: in my town, like in many small shops or businesses, they just collect the data by hand.">Llevo años corriendo mi homelab en Proxmox —tengo un Intel i3-12100F con varios contenedores LXC en producción. Uno de mis proyectos siempre
+  ha sido buscar formas de automatizar procesos reales. El proceso es simple, tanto en mi pueblo como muchas tiendas o establecimientos pequeños
+simplemente recogen los datos a mano.</p>
+
+<p data-en="I thought: why not fully automate this? Not just generate pre-recorded voice responses, but an agent that understands natural language, makes real-time decisions based on what's in the database, and corrects what it misunderstands if the customer clarifies.">Pensé: ¿por qué no automatizar completamente esto? No solo generar respuestas de voz pre-grabadas, sino un agente que entienda lenguaje natural,
+  que tome decisiones en tiempo real basadas en lo que hay en la base de datos, que corrija lo que entiende mal si el cliente lo aclara.</p>
+
+<p data-en="The challenge wasn't trivial. It required correctly orchestrating several third-party services (Twilio for the number, Vapi for voice orchestration, Deepgram for transcription, GPT-4o for intelligence, ElevenLabs for synthesis) with my own self-hosted infrastructure (n8n for logic, MariaDB for data, Evolution API for WhatsApp). Everything had to have low latency, because a 5-second delay between the customer speaking and the agent responding breaks the conversation.">El reto no era trivial. Requería orquestar correctamente varios servicios de terceros (Twilio para el número, Vapi para orquestación de voz,
+  Deepgram para transcripción, GPT-4o para inteligencia, ElevenLabs para síntesis) con mi propia infraestructura self-hosted (n8n para lógica,
+  MariaDB para datos, Evolution API para WhatsApp). Todo tenía que tener latencia baja, porque una demora de 5 segundos entre que el cliente habla
+  y el agente responde rompe la conversación.</p>
+
+<h2 data-en="The voice architecture: how the data flows">La arquitectura de voz: cómo fluyen los datos</h2>
+
+<p data-en="The flow is linear but each link has its own complexities. When someone calls the number +1 775 256 9253 (a Twilio number I bought for $1.15/month), this happens in under 2 seconds of total latency:">El flujo es lineal pero cada eslabón tiene sus complejidades. Cuando alguien llama al número +1 775 256 9253 (un número de Twilio que compré por $1.15/mes),
+  esto ocurre en menos de 2 segundos de latencia total:</p>
+
+<div class="flow">
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-phone" aria-hidden="true"></i></div><div class="flow-name">Twilio</div><div class="flow-desc" data-en="Receives the call">Recibe llamada</div></div>
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-microphone" aria-hidden="true"></i></div><div class="flow-name">Deepgram</div><div class="flow-desc" data-en="Transcribes audio to Spanish text">Transcribe audio a texto en español</div></div>
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-brain" aria-hidden="true"></i></div><div class="flow-name">GPT-4o mini</div><div class="flow-desc" data-en="Interprets intent and extracts data">Interpreta intención y extrae datos</div></div>
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-cogs" aria-hidden="true"></i></div><div class="flow-name">n8n</div><div class="flow-desc" data-en="Runs logic and queries the DB">Ejecuta lógica y consulta DB</div></div>
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-volume-up" aria-hidden="true"></i></div><div class="flow-name">ElevenLabs</div><div class="flow-desc" data-en="Converts text to natural voice">Convierte texto a voz natural</div></div>
+  <div class="flow-step"><div class="flow-icon"><i class="fas fa-comments" aria-hidden="true"></i></div><div class="flow-name">WhatsApp</div><div class="flow-desc" data-en="Sends confirmation">Envía confirmación</div></div>
+</div>
+
+<p data-en="Twilio receives the call and forwards it to Vapi (a platform specialized in AI voice orchestration). Vapi is the heart of the system: it handles STT (speech-to-text) using Deepgram, sends the transcribed audio to GPT-4o mini to interpret it and generate a response, and then converts that response to audio using ElevenLabs so it sounds natural. But here's the important part: while doing all that, it can also run custom functions (the &quot;tools&quot; in Vapi).">Twilio recibe la llamada y la redirige a Vapi (una plataforma especializada en orquestación de voz IA). Vapi es el corazón del sistema: maneja el STT
+  (speech-to-text) usando Deepgram, envía el audio transcrito a GPT-4o mini para que lo interprete y genere una respuesta, y luego convierte
+  esa respuesta a audio usando ElevenLabs para que suene natural. Pero aquí viene la parte importante: mientras hace todo eso, también puede
+  ejecutar funciones personalizadas (las "tools" o herramientas en Vapi).</p>
+
+<p data-en="I set up a tool called &quot;check_availability&quot; that makes an HTTP POST to my n8n webhook (a private endpoint on my own domain). The body contains the data the model extracted: date, time, customer name, phone. n8n runs a SQL query, checks whether there's a slot in that time window, and if there is, inserts the booking directly into MariaDB. It then responds to the webhook with a JSON indicating success or failure. Vapi reads that response and turns it into conversational language so the agent says something like &quot;perfect, your booking for tomorrow at 2pm is confirmed&quot;.">Configuré una tool llamada "check_availability" que hace un HTTP POST a mi webhook de n8n (un endpoint privado en mi dominio).
+  El body contiene los datos que el modelo extrajo: fecha, hora, nombre del cliente, teléfono. n8n ejecuta una query SQL, verifica si hay hueco en
+  esa franja horaria, y si lo hay, inserta la reserva directamente en MariaDB. Luego responde al webhook con un JSON indicando éxito o fallo.
+  Vapi lee esa respuesta y la traduce a lenguaje conversacional para que el agente diga algo como "perfecto, tu reserva para mañana a las 14:00 está confirmada".</p>
+
+<p data-en="At the same time, when the booking is inserted into MariaDB, the n8n workflow makes a second HTTP request to Evolution API (my self-hosted WhatsApp instance) to send a confirmation message to the customer. All of this happens while the customer is still on the call listening to the agent's response.">Al mismo tiempo, cuando la reserva se inserta en MariaDB, el workflow de n8n hace un segundo HTTP request a Evolution API
+  (mi instancia self-hosted de WhatsApp) para enviar un mensaje de confirmación al cliente. Todo esto ocurre mientras el cliente todavía está en la
+  llamada escuchando la respuesta del agente.</p>
+
+<h2 data-en="The infrastructure: my Proxmox homelab">La infraestructura: mi homelab de Proxmox</h2>
+
+<p data-en="All of this runs on my own Proxmox machine. I installed a clean copy of Proxmox 8 on an Intel i3-12100F.">Todo esto corre en una máquina con Proxmox propia. Instalé una copia limpia de Proxmox 8 en un Intel i3-12100F.</p>
+
+<p data-en="Inside Proxmox I have several dedicated LXC containers, of which the ones I use in this project are:">Dentro de Proxmox tengo varios contenedores LXC dedicados, de los cuales los que uso en este proyecto son:</p>
+
+<div class="components">
+  <div class="component">
+    <div class="component-role" data-en="Central orchestration">Orquestación central</div>
+    <div class="component-icon"><i class="fas fa-cogs" aria-hidden="true"></i></div>
+    <div class="component-name">n8n + Evolution API</div>
+    <div class="component-desc" data-en="Debian 12, 4GB RAM, 12GB disk. Docker Compose running n8n:latest (the workflow engine), postgres (an Evolution dependency), and Evolution API v2.3.7 (my self-hosted WhatsApp instance). I expose n8n through another LXC with Nginx Proxy Manager using a Let's Encrypt SSL certificate.">Debian 12, 4GB RAM, 12GB disco. Docker Compose corriendo n8n:latest (el motor de workflows), postgres (dependencia de Evolution), y Evolution API v2.3.7
+      (mi instancia de WhatsApp self-hosted). Exponé n8n a través de otro LXC con Nginx Proxy Manager con certificado SSL Let's Encrypt.</div>
+  </div>
+  <div class="component">
+    <div class="component-role" data-en="LXC 106 — Database">LXC 106 — Base de datos</div>
+    <div class="component-icon"><i class="fas fa-database" aria-hidden="true"></i></div>
+    <div class="component-name">MariaDB</div>
+    <div class="component-desc" data-en="MariaDB configured so the LXC can connect remotely. This is where the bookings table lives, with fields: id (auto-increment), date, time, table, status (ENUM), customer_name, phone, created_at (timestamp). A dedicated n8n_user with SELECT/INSERT/UPDATE permissions on the soporte_demo DB.">MariaDB para que LXC pueda conectarse remotamente. Aquí vive la tabla de reservas con campos: id (auto-incremento), fecha, hora, mesa, estado (ENUM),
+      nombre_cliente, telefono, creado_en (timestamp). Usuario dedicado n8n_user con permisos SELECT/INSERT/UPDATE sobre la DB soporte_demo.</div>
+  </div>
+  <div class="component">
+    <div class="component-role" data-en="Reverse proxy">Proxy inverso</div>
+    <div class="component-icon"><i class="fas fa-link" aria-hidden="true"></i></div>
+    <div class="component-name">Nginx Proxy Manager</div>
+    <div class="component-desc" data-en="Exposes the domain with automatic SSL/TLS. It manages certificates, websockets, and routing. This lets Vapi make HTTPS requests to my n8n webhook without certificate issues.">Expone el dominio con SSL/TLS automático. Gestiona certificados, websockets, y enrutamiento. Esto permite que Vapi pueda hacer requests HTTPS
+      a mi webhook de n8n sin problemas de certificado.</div>
+  </div>
+</div>
+
+<h2 data-en="The data model: how I designed the bookings table">El modelo de datos: cómo diseñé la tabla de reservas</h2>
+
+<p data-en="I use a dynamic model: I only insert rows when there's a real booking. To check availability for a specific date/time, I use a simple COUNT query:">Uso un modelo dinámico: solo inserto filas cuando hay una reserva real. Para verificar si hay disponibilidad para una fecha/hora específica,
+  uso una simple query COUNT:</p>
+
+<div class="code-block">
+<div class="code-label" data-en="Real-time availability query">Query de disponibilidad en tiempo real</div>
+<code>SELECT COUNT(*) as ocupadas FROM reservas
+WHERE fecha = '2026-07-01' AND hora = '14:00'
+AND estado IN ('Temporal', 'Confirmada')</code>
+</div>
+
+<p data-en="If ocupadas = 0, that slot is free and I INSERT directly. If ocupadas > 1 (because there can be multiple tables), I reject the booking. It's far simpler and more robust.">Si ocupadas = 0, ese horario está libre, hago el INSERT directamente. Si ocupadas > 1 (porque puede haber múltiples mesas), rechazo la reserva.
+  Es muchísimo más simple y robusto.</p>
+
+<h2 data-en="The n8n workflow: the booking logic step by step">El workflow de n8n: la lógica de reservas paso a paso</h2>
+
+<figure class="figure-workflow">
+  <img src="assets/images/n8n-workflow.png" alt="Diagrama del workflow de n8n" data-en-alt="n8n workflow diagram" loading="lazy" />
+</figure>
+
+<p data-en="n8n let me orchestrate everything without writing custom backend code. The workflow has two main webhook endpoints:">n8n me permitió orquestar todo sin escribir código backend personalizado. El workflow tiene dos endpoints webhook principales:</p>
+
+<h3 data-en="Endpoint 1: POST /webhook/soporte-demo (make a booking)">Endpoint 1: POST /webhook/soporte-demo (hacer reserva)</h3>
+
+<p data-en="This is the one Vapi calls when the user says &quot;I want to make a booking for Friday at 2pm&quot;. The body comes with: date (string YYYY-MM-DD), time (string HH:MM), name (string), phone (string in 34XXXXXXXXX format).">Este es el que Vapi llama cuando el usuario dice "quiero hacer una reserva para el viernes a las 14:00". El body viene con:
+  fecha (string AAAA-MM-DD), hora (string HH:MM), nombre (string), telefono (string en formato 34XXXXXXXXX).</p>
+
+<p data-en="The flow inside n8n goes like this:">El flujo dentro de n8n es así:</p>
+
+<p data-en="&lt;strong&gt;Step 1 — Webhook:&lt;/strong&gt; Receives the POST and validates that it has all the fields. If something is missing, it responds with a 400 error."><strong>Paso 1 — Webhook:</strong> Recibe el POST, valida que tenga todos los campos. Si falta algo, responde con error 400.</p>
+
+<p data-en="&lt;strong&gt;Step 2 — Availability query:&lt;/strong&gt; I run a SQL COUNT(*) query to check how many bookings already exist for that date and time. The query is: SELECT COUNT(*) as ocupadas FROM reservas WHERE fecha = '{{ $json.body.fecha }}' AND hora = '{{ $json.body.hora }}'"><strong>Paso 2 — Query de disponibilidad:</strong> Ejecuto una SQL query COUNT(*) para verificar cuántas reservas ya existen para esa fecha y hora. La query es: SELECT COUNT(*) as ocupadas FROM reservas WHERE fecha = '{{ $json.body.fecha }}' AND hora = '{{ $json.body.hora }}'</p>
+
+<p data-en="Here I learned an important lesson: the values come in $json, but only inside the Webhook node. In downstream nodes I lose that reference. I had to use $('Webhook').item.json.body.fecha instead of $json.body.fecha. This cost me hours of debugging.">Aquí aprendí una lección importante: los valores viene en $json, pero solo dentro del nodo Webhook. En nodos downstream, pierdo esa referencia. Tuve que usar $('Webhook').item.json.body.fecha en lugar de $json.body.fecha. Esto me costó horas de debugging.</p>
+
+<p data-en="&lt;strong&gt;Step 3 — IF conditional node:&lt;/strong&gt; If ocupadas = 0 (there's a slot), I go into the true branch. If ocupadas > 0, I go into the false branch."><strong>Paso 3 — Nodo IF condicional:</strong> Si ocupadas = 0 (hay hueco), entro en rama true. Si ocupadas > 0, entro en rama false.</p>
+
+<p data-en="&lt;strong&gt;TRUE branch (availability):&lt;/strong&gt;"><strong>Rama TRUE (hay disponibilidad):</strong></p>
+
+<p data-en="I run an INSERT into MariaDB: INSERT INTO reservas (fecha, hora, mesa, estado, nombre_cliente, telefono) VALUES ('{{ $('Webhook').item.json.body.fecha }}', '{{ $('Webhook').item.json.body.hora }}', '1', 'Confirmada', '{{ $('Webhook').item.json.body.nombre }}', '{{ $('Webhook').item.json.body.telefono }}')">Ejecuto un INSERT en MariaDB: INSERT INTO reservas (fecha, hora, mesa, estado, nombre_cliente, telefono) VALUES ('{{ $('Webhook').item.json.body.fecha }}', '{{ $('Webhook').item.json.body.hora }}', '1', 'Confirmada', '{{ $('Webhook').item.json.body.nombre }}', '{{ $('Webhook').item.json.body.telefono }}')</p>
+
+<p data-en="Then I respond to the webhook with a success JSON: { &quot;success&quot;: true, &quot;message&quot;: &quot;Mesa reservada, confirmando datos&quot; }">Luego respondo al webhook con JSON de éxito: { "success": true, "message": "Mesa reservada, confirmando datos" }</p>
+
+<p data-en="Next, I run an HTTP Request to Evolution API at http://evolution-api:8080/message/sendText/soporte-demo (since Evolution API is in the same docker-compose, I use the internal hostname). The body is: { &quot;number&quot;: &quot;{{ $('Webhook').item.json.body.telefono }}&quot;, &quot;text&quot;: &quot;Hola {{ $('Webhook').item.json.body.nombre }}, tu mesa para el {{ $('Webhook').item.json.body.fecha }} a las {{ $('Webhook').item.json.body.hora }} está confirmada. ¡Te esperamos!&quot; }">A continuación, ejecuto un HTTP Request hacia Evolution API en http://evolution-api:8080/message/sendText/soporte-demo (porque Evolution API está en el mismo docker-compose, uso hostname interno). El body es: { "number": "{{ $('Webhook').item.json.body.telefono }}", "text": "Hola {{ $('Webhook').item.json.body.nombre }}, tu mesa para el {{ $('Webhook').item.json.body.fecha }} a las {{ $('Webhook').item.json.body.hora }} está confirmada. ¡Te esperamos!" }</p>
+
+<p data-en="Evolution API receives this, looks up my WhatsApp instance (which is linked to the business's personal number), and sends the text message to the customer. All without depending on the official WhatsApp Business API, which is crucial to keep full control.">Evolution API recibe esto, busca mi instancia de WhatsApp (que está vinculada al número personal del negocio), y envía el mensaje de texto al cliente. Todo sin dependencia de la API oficial de WhatsApp Business, lo cual es crucial para mantener control total.</p>
+
+<p data-en="&lt;strong&gt;FALSE branch (no availability):&lt;/strong&gt;"><strong>Rama FALSE (no hay disponibilidad):</strong></p>
+
+<p data-en="I respond to the webhook with: { &quot;success&quot;: false, &quot;message&quot;: &quot;No hay disponibilidad para esa fecha y hora&quot; }. Vapi receives this and the agent says something like &quot;sorry, that time is taken. Would another time work for you?&quot;.">Respondo al webhook con: { "success": false, "message": "No hay disponibilidad para esa fecha y hora" }. Vapi recibe esto y el agente dice algo como "lo siento, ese horario está ocupado. ¿Te viene bien otra hora?".</p>
+
+
+<h3 data-en="Endpoint 2: GET /webhook/reservas-list (list all bookings)">Endpoint 2: GET /webhook/reservas-list (listar todas las reservas)</h3>
+
+
+<p data-en="This is a simpler endpoint for administration. It runs SELECT id, fecha, hora, mesa, estado, nombre_cliente, telefono FROM reservas ORDER BY fecha, hora and responds with the full JSON array. I use it to build an admin panel in the future.">Este es un endpoint más simple para administración. Ejecuta SELECT id, fecha, hora, mesa, estado, nombre_cliente, telefono FROM reservas ORDER BY fecha, hora y responde con el array JSON completo. Lo uso para construir un panel de administración en el futuro.</p>
+
+
+
+<h2 data-en="Vapi: configuring the AI voice assistant">Vapi: configurando el asistente de voz IA</h2>
+
+<p data-en="Vapi is where the magic happens. I went to https://dashboard.vapi.ai and created an assistant called &quot;Soporte Demo&quot; with the following characteristics:">Vapi es donde ocurre la magia. Accedí a https://dashboard.vapi.ai y creé un asistente llamado "Soporte Demo" con las siguientes características:</p>
+
+<figure class="figure-workflow">
+  <img src="assets/images/vapi-settings.png" alt="Panel de configuración de Vapi" data-en-alt="Vapi settings panel" loading="lazy" />
+</figure>
+
+<p data-en="&lt;strong&gt;Transcription model (STT):&lt;/strong&gt; Deepgram Flux General Multilingual, configured specifically for Spain's Spanish. Deepgram has low latency (~100ms) and understands peninsular Spanish very well, including eastern Spanish accents."><strong>Modelo de transcripción (STT):</strong> Deepgram Flux General Multilingual, configurado específicamente para español de España.
+   Deepgram tiene baja latencia (~100ms) y entiende muy bien el español peninsular, incluyendo acentos del este de España.</p>
+
+<p data-en="&lt;strong&gt;Language model (LLM):&lt;/strong&gt; OpenAI's GPT-4o Mini Cluster. It's cheaper than full GPT-4o but understands colloquial Spanish perfectly, can reason about time-slot availability, correct phone numbers the STT mishears, etc."><strong>Modelo de lenguaje (LLM):</strong> GPT-4o Mini Cluster de OpenAI. Es más económico que GPT-4o completo pero entiende perfectamente español
+  coloquial, puede razonar sobre disponibilidad de horarios, corregir números de teléfono que el STT malinterprete, etc.</p>
+
+<p data-en="&lt;strong&gt;Voice synthesis model (TTS):&lt;/strong&gt; ElevenLabs Turbo v2.5, voice &quot;Alice&quot;. I chose it for its professional-yet-warm tone, without sounding robotic. Latency ~400ms. I tried several voices and Alice was the best received in tests."><strong>Modelo de síntesis de voz (TTS):</strong> ElevenLabs Turbo v2.5, voz "Alice". La elegí por su tono profesional-cercano, sin sonar robótica.
+  Latencia ~400ms. Probé varias voces y Alice fue la que mejor recibimiento tuvo en pruebas.</p>
+
+<p data-en="&lt;strong&gt;First Message:&lt;/strong&gt; &quot;Hello, thanks for calling Soporte Demo. How can I help you? Would you like to make a booking?&quot;"><strong>First Message:</strong> "Hola, gracias por llamar a Soporte Demo. ¿En qué puedo ayudarte? ¿Te gustaría hacer una reserva?"</p>
+
+<p data-en="&lt;strong&gt;Fallback Destination:&lt;/strong&gt; personal mobile. If Vapi loses connection or n8n doesn't respond, the call is automatically redirected to me so I can take the booking manually."><strong>Fallback Destination:</strong> móvil personal. Si Vapi pierde conexión o n8n no responde, la llamada se redirige automáticamente a mí para que
+  pueda tomar manualmente la reserva.</p>
+
+<h3 data-en="The System Prompt: instructions to the agent">El System Prompt: instrucciones al agente</h3>
+
+<p data-en="This is where I really define the agent's behavior. The prompt I use is quite long, but basically:">Aquí es donde realmente defino el comportamiento del agente. El prompt que uso es bastante largo, pero básicamente:</p>
+
+<p data-en="&quot;You are the phone assistant for Soporte Demo. Your job is to help customers make bookings by phone naturally and efficiently. If the customer wants to make a booking, you need to obtain: date, time, full name, phone number. Do it conversationally, not like a form. If the customer says 'whenever', offer midday or evening. If they say 'tomorrow', convert it to the real date YYYY-MM-DD. If the customer says a number without a country code (9 digits), assume it's Spain and add '34' in front. Confirm the details out loud before proceeding. Once confirmed, use the 'check_availability' function to check availability. If there's availability, tell them the booking is registered and that they'll get a WhatsApp confirmation. If there's no availability, apologize and offer another date/time.&quot;">"Eres el asistente telefónico de Soporte Demo. Tu trabajo es ayudar a los clientes a hacer reservas por teléfono de forma natural y eficiente.
+  Si el cliente quiere hacer una reserva, necesitas obtener: fecha, hora, nombre completo, número de teléfono. Hazlo de forma conversacional, no
+  como un formulario. Si el cliente dice 'cuando sea', ofrécele mediodía o noche. Si dice 'mañana', conviértelo a la fecha real AAAA-MM-DD. Si el
+  cliente dice un número sin código de país (9 dígitos), asume que es España y añade '34' delante. Confirma los datos en voz alta antes de proceder.
+  Una vez confirmados, usa la función 'check_availability' para verificar disponibilidad. Si hay disponibilidad, informa que la reserva está registrada
+  y que recibirá confirmación por WhatsApp. Si no hay disponibilidad, discúlpate y ofrece otra fecha/hora."</p>
+
+<p data-en="The prompt is critical. It has to be specific enough to guarantee the agent behaves consistently, but flexible enough to handle unpredictable natural conversations.">El prompt es crítico. Tiene que ser lo suficientemente específico como para garantizar que el agente actúe consistentemente, pero lo suficientemente
+  flexible como para manejar conversaciones naturales impredecibles.</p>
+
+<h3 data-en="The Tools: functions Vapi can run">Las Tools: funciones que Vapi puede ejecutar</h3>
+
+<p data-en="I set up a single tool called &quot;check_availability&quot;. It's an &quot;API Request&quot; type pointing to my HTTPS endpoint. POST method. The required parameters are: date (string), time (string), name (string), phone (string). Vapi handles all the JSON serialization, the HTTP sending, and waiting for the response. It then passes the result (success: true/false and message) to the LLM, which translates it into natural language for the customer.">Configuré una sola tool llamada "check_availability". Es de tipo "API Request" que apunta a mi endpoint HTTPS. Método POST. Los parámetros requeridos
+  son: fecha (string), hora (string), nombre (string), telefono (string). Vapi maneja toda la serialización JSON, el envío HTTP, y la espera de respuesta.
+  Luego pasa el resultado (success: true/false y message) al LLM, que lo traduce a lenguaje natural para el cliente.</p>
+
+<h2 data-en="Twilio: getting a real number">Twilio: obtener un número real</h2>
+
+<p data-en="I bought a real number on Twilio. The flow was:">Compré un número real en Twilio. El flujo fue:</p>
+
+<p data-en="1. Create a Twilio account (I started with free trial credit).">1. Crear cuenta en Twilio (empecé con trial credit gratuito).</p>
+
+<p data-en="2. Go to Phone Numbers → Buy a Number. I filtered by country (USA) and ended up with +1 775 256 9253 (Fish Lake Valley, Nevada). $1.15/month, very cheap.">2. Ir a Phone Numbers → Buy a Number. Filtré por país (USA), y terminé con +1 775 256 9253 (Fish Lake Valley, Nevada). $1.15/mes, muy barato.</p>
+
+<p data-en="3. Once bought, I went to the number's settings and configured the Voice Webhook. I specified that when a call comes in, Twilio should make a POST to Vapi with the call information.">3. Una vez comprado, fui a los settings del número y configuré Voice Webhook. Especifiqué que cuando llega una llamada, Twilio debe hacer un POST
+  a vapi con la información de la llamada.</p>
+
+<p data-en="4. I imported the number into Vapi and assigned it to the &quot;Soporte Demo&quot; assistant.">4. Importé el número en Vapi, lo asigné al asistente "Soporte Demo".</p>
+
+<p data-en="5. I configured the Call Status Webhook so Twilio notifies me when the call ends (useful for logging and analytics).">5. Configuré Call Status Webhook para que Twilio me notifique cuando termina la llamada (útil para logging y análisis).</p>
+
+<p data-en="One important thing: at first, when Vapi tried to make HTTPS requests to my n8n webhook, Twilio wouldn't let the calls connect because the Twilio trial account didn't have a verified credit card. Once I added a card (even a test one), everything worked.">Una cosa importante: al principio, cuando Vapi intentaba hacer requests HTTPS a mi webhook de n8n, Twilio no permitía que las llamadas se conectaran
+  porque la cuenta trial de Twilio no tenía tarjeta de crédito verificada. Una vez que añadí una tarjeta (aunque sea de prueba), todo funcionó.</p>
+
+<h2 data-en="Evolution API: self-hosted WhatsApp">Evolution API: WhatsApp self-hosted</h2>
+
+<p data-en="Instead of using the official WhatsApp Business API (which is complex to set up and requires business validation), I used Evolution API, an open-source wrapper that uses Baileys (a library that simulates a WhatsApp Web client).">En lugar de usar la API oficial de WhatsApp Business (que es compleja de configurar y requiere validación de negocio), usé Evolution API,
+  que es una envoltura open-source que usa Baileys (una librería que simula un cliente de WhatsApp Web).</p>
+
+<p data-en="I installed Evolution API inside the same docker-compose as n8n. I accessed the manager (within the local network) and created a new instance. Evolution showed me a QR code that I scanned with my personal phone, linking my WhatsApp number (the business one) to that instance.">Instalé Evolution API dentro del mismo docker-compose que n8n. Accedí al manager (dentro de la red local) y creé una instancia nueva.
+  Evolution me mostró un código QR que escanié con mi móvil personal, vinculando mi número de WhatsApp (el del negocio) a esa instancia.</p>
+
+<p data-en="Now, when n8n makes an HTTP POST with a destination number and a text, Evolution simulates that I (from my phone on WhatsApp Web) am sending that message. It's a bit of a trick, but it works perfectly and I don't depend on any official API.">Ahora, cuando n8n hace un HTTP POST con un número de destino y un texto, Evolution simula que yo (desde mi teléfono en WhatsApp Web) estoy enviando
+  ese mensaje. Es un poco de trucos, pero funciona perfectamente y no dependo de ningún API oficial.</p>
+
+<p data-en="The only restriction: numbers must be in a format without '+' and with a country code. So instead of +346XXXXXXXX, I use 346XXXXXXXX. The agent understands this, because the System Prompt instructs it that if someone says a number without a country, it should interpret it as Spanish and prepend &quot;34&quot;.">La única restricción: los números deben estar en formato sin '+' y con código de país. Entonces en lugar de +346XXXXXXXX, uso 346XXXXXXXX.
+  El agente entiende esto, porque el System Prompt le instruye que si alguien dice un número sin país, lo interprete como español y anteponga "34".</p>
+
+<h2 data-en="The problems I ran into (and how I solved them)">Los problemas que encontré (y cómo los resolví)</h2>
+
+<h3 data-en="Problem 1: Losing context in n8n">Problema 1: Pérdida de contexto en n8n</h3>
+
+<p data-en="The data arriving in the Webhook was lost in downstream nodes. When I ran the availability query, the IF node, the INSERT, it tried to reference the original data with $json.body.fecha, but that returned undefined. I had to use explicit references: $('Webhook').item.json.body.fecha, $('Webhook').item.json.body.hora, etc. This required rewriting the whole workflow, but after that everything worked.">Los datos que llegaban en el Webhook se perdían en nodos downstream. Cuando ejecutaba la query de disponibilidad, el nodo IF, el INSERT,
+  intentaba referenciar los datos originales con $json.body.fecha, pero eso devolvía undefined. Tuve que usar referencias explícitas:
+   $('Webhook').item.json.body.fecha, $('Webhook').item.json.body.hora, etc. Esto requirió reescribir todo el workflow, pero después de eso todo funcionó.</p>
+
+<h3 data-en="Problem 2: Phone numbers in odd formats">Problema 2: Números de teléfono en formatos raros</h3>
+
+<p data-en="Customers say numbers unpredictably: all at once, digit by digit, with or without the 34 prefix in front. The STT converts this to &quot;6XX XX XX XX&quot; or &quot;34 6XX XX XX XX&quot; with or without spaces, etc. I should have built a normalization function in n8n, but instead I put the responsibility on the System Prompt: &quot;If the user says 9 digits without a country code, assume it's Spain and prepend 34 automatically&quot;. This works in 95% of cases.">Los clientes dicen los números de forma impredecible: de corrido, dígito a dígito, con o sin el prefijo 34 delante.
+  El STT convierte esto a "6XX XX XX XX" o "34 6XX XX XX XX" sin espacios, con espacios, etc. Debería haber construido una función de normalización
+  en n8n, pero en lugar de eso, puse la responsabilidad en el System Prompt: "Si el usuario dice 9 dígitos sin código de país, asume que es España y
+  antepón 34 automáticamente". Esto funciona en el 95% de casos.</p>
+
+<h3 data-en="Problem 3: Fragile availability model">Problema 3: Modelo de disponibilidad frágil</h3>
+
+<p data-en="As I mentioned, switching from a &quot;pre-created rows&quot; model to a &quot;dynamic&quot; one was a turning point. I had to rethink all the n8n logic, the SQL queries, and the conditional flow. But the new model is much more robust.">Como mencioné, cambiar de un modelo de "filas pre-creadas" a "dinámico" fue un punto de quiebre. Tuve que repensar toda la lógica de n8n, las queries SQL,
+  y el flujo condicional. Pero el nuevo modelo es mucho más robusto.</p>
+
+<h3 data-en="Problem 4: Empty webhook response">Problema 4: Respuesta vacía del webhook</h3>
+
+<p data-en="Once Vapi made the HTTPS request to my webhook, it sometimes received an empty JSON, even though local curl showed the webhook responding correctly. The problem: Twilio needs a verified credit card to allow calls on trial. Once I added the card, everything flowed perfectly.">Una vez que Vapi hacía el request HTTPS a mi webhook, a veces recibía un JSON vacío, aunque curl local me mostraba que el webhook respondía correctamente.
+  El problema: Twilio necesita tarjeta de crédito verificada para permitir llamadas en trial. Una vez que añadí la tarjeta, todo fluyó perfecto.</p>
+
+<h2 data-en="A test call: from start to finish">Una llamada de prueba: de principio a fin</h2>
+
+<p data-en="I ran tests calling the number from my mobile. Here's the exact flow of what happens:">Hice pruebas llamando al número desde mi móvil. Aquí está el flujo exacto de lo que ocurre:</p>
+
+<figure class="video-figure">
+  <div class="video-embed">
+    <iframe src="https://www.youtube-nocookie.com/embed/AeU6ZvL5cHg" title="Demostración: llamada real al agente de voz"
+            loading="lazy" allowfullscreen
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"></iframe>
+  </div>
+</figure>
+
+<p data-en="&lt;strong&gt;Me (customer):&lt;/strong&gt; I call +1 775 256 9253. After 2 seconds, I hear a voice: &quot;Hello, thanks for calling Soporte Demo. How can I help you? Would you like to make a booking?&quot;"><strong>Yo (cliente):</strong> Llamo al +1 775 256 9253. Después de 2 segundos, escucho una voz: "Hola, gracias por llamar a Soporte Demo.
+  ¿En qué puedo ayudarte? ¿Te gustaría hacer una reserva?"</p>
+
+<p data-en="&lt;strong&gt;Me:&lt;/strong&gt; &quot;Yes, hi. I'd like a table for tomorrow, midday. There are three of us.&quot;"><strong>Yo:</strong> "Sí, hola. Quiero una mesa para mañana, mediodía. Somos tres personas."</p>
+
+<p data-en="&lt;strong&gt;Vapi/Agent (internally):&lt;/strong&gt; Deepgram transcribes my voice to &quot;Yes, hi. I'd like a table for tomorrow, midday. There are three of us.&quot; GPT-4o mini analyzes this and understands that: date = tomorrow (converts to 2026-07-02), time = midday (proposes 14:00), party size = not critical data. It replies: &quot;Perfect, I'll book you a table for tomorrow at 2pm. What's your name and phone number?&quot;"><strong>Vapi/Agente (internamente):</strong> Deepgram transcribe mi voz a "Sí, hola. Quiero una mesa para mañana, mediodía. Somos tres personas."
+  GPT-4o mini analiza esto, entiende que: fecha = mañana (convierte a 2026-07-02), hora = mediodía (propone 14:00), partido = no es dato crítico.
+  Responde: "Perfecto, te reservo una mesa para mañana a las 14:00. ¿Cuál es tu nombre y número de teléfono?"</p>
+
+<p data-en="&lt;strong&gt;Me:&lt;/strong&gt; &quot;My name is Sergio, and my number is X.&quot;"><strong>Yo:</strong> "Me llamo Sergio, y mi número es X."</p>
+
+<p data-en="&lt;strong&gt;Vapi/Agent (internally):&lt;/strong&gt; Deepgram transcribes. GPT-4o extracts: name = Sergio, phone = X. The LLM sees they're 9 digits without a country code, so per the prompt it prepends &quot;34&quot; → phone = 34X. It replies: &quot;Perfect Sergio, let's confirm: table for tomorrow (July 2nd) at 2pm, your number is X. Is that correct?&quot;"><strong>Vapi/Agente (internamente):</strong> Deepgram transcribe. GPT-4o extrae: nombre = Sergio, teléfono = X. El LLM ve que son 9 dígitos sin código
+  de país, entonces según el prompt, antepone "34" → teléfono = 34X. Responde: "Perfecto Sergio, confirmemos: mesa para mañana (2 de julio) a las 14:00,
+  tu número es X. ¿Es correcto?"</p>
+
+<p data-en="&lt;strong&gt;Me:&lt;/strong&gt; &quot;Yes, correct.&quot;"><strong>Yo:</strong> "Sí, correcto."</p>
+
+<p data-en="&lt;strong&gt;Vapi/Agent (internally):&lt;/strong&gt; It just confirmed. Now it runs the &quot;check_availability&quot; tool, which makes a POST to n8n with: { &quot;fecha&quot;: &quot;2026-07-02&quot;, &quot;hora&quot;: &quot;14:00&quot;, &quot;nombre&quot;: &quot;Sergio&quot;, &quot;telefono&quot;: &quot;34X&quot; }"><strong>Vapi/Agente (internamente):</strong> Acaba de confirmar. Ahora ejecuta la tool "check_availability", que hace un POST a n8n con: { "fecha":
+  "2026-07-02", "hora": "14:00", "nombre": "Sergio", "telefono": "34X" }</p>
+
+<p data-en="&lt;strong&gt;In n8n (LXC 116):&lt;/strong&gt; The webhook receives the POST. The COUNT(*) query returns ocupadas = 0 (no booking for that slot). I go into the TRUE branch. I run the INSERT into MariaDB (LXC 106). INSERT successful. I respond to the webhook: { &quot;success&quot;: true }. At the same time, I make an HTTP Request to Evolution API: POST to http://evolution-api:8080/message/sendText/soporte-demo with body { &quot;number&quot;: &quot;34X&quot;, &quot;text&quot;: &quot;Hola Sergio, tu mesa para el 2026-07-02 a las 14:00 está confirmada. ¡Te esperamos!&quot; }"><strong>En n8n (LXC 116):</strong> El webhook recibe el POST. Query COUNT(*) devuelve ocupadas = 0 (no hay reserva para esa franja).
+  Entro en rama TRUE. Ejecuto INSERT en MariaDB (LXC 106). INSERT exitoso. Respondo al webhook: { "success": true }. Al mismo tiempo, hago HTTP Request
+  a Evolution API: POST a http://evolution-api:8080/message/sendText/soporte-demo con body { "number": "34X", "text": "Hola Sergio, tu mesa para el
+  2026-07-02 a las 14:00 está confirmada. ¡Te esperamos!" }</p>
+
+<p data-en="&lt;strong&gt;In Evolution API (same LXC):&lt;/strong&gt; It receives the request. It simulates a send from my WhatsApp number to the customer's number. The customer receives the WhatsApp message: &quot;Hola Sergio, tu mesa para el 2026-07-02 a las 14:00 está confirmada. ¡Te esperamos!&quot;"><strong>En Evolution API (mismo LXC):</strong> Recibe el request. Simula un envío desde mi número de WhatsApp al número del cliente.
+  El cliente recibe el mensaje en WhatsApp: "Hola Sergio, tu mesa para el 2026-07-02 a las 14:00 está confirmada. ¡Te esperamos!"</p>
+
+<p data-en="&lt;strong&gt;Back to Vapi:&lt;/strong&gt; It receives success: true from n8n. The LLM generates a reply: &quot;Excellent Sergio, your booking is confirmed. You'll receive a WhatsApp message with the details. Thank you very much!&quot;"><strong>De vuelta a Vapi:</strong> Recibe success: true de n8n. El LLM genera una respuesta: "Excelente Sergio, tu reserva está confirmada.
+  Recibirás un mensaje de WhatsApp con los detalles. ¡Muchas gracias!"</p>
+
+<p data-en="&lt;strong&gt;Me (customer):&lt;/strong&gt; I hear: &quot;Excellent Sergio, your booking is confirmed. You'll receive a WhatsApp message with the details. Thank you very much!&quot; I hang up. The call ended after about 90 seconds of completely natural conversation. On my mobile, I have a WhatsApp message confirming the booking."><strong>Yo (cliente):</strong> Escucho: "Excelente Sergio, tu reserva está confirmada. Recibirás un mensaje de WhatsApp con los detalles. ¡Muchas gracias!"
+  Cuelgo. La llamada terminó después de unos 90 segundos de conversación completamente natural. En mi móvil, tengo un mensaje de WhatsApp confirmando la reserva.</p>
+
+<p data-en="All of this happened without a human touching anything. No operator, no manual data handling, no chance of the information being lost.">Todo esto ocurrió sin que un humano tocara nada. Sin operario, sin gestión manual de datos, sin posibilidad de que se pierda la información.</p>
+
+<h2 data-en="Technical lessons learned">Lecciones técnicas aprendidas</h2>
+
+<p data-en="After building this, I learned several important things that I'll document for future projects:">Después de construir esto, aprendí varias cosas importantes que documentaré para futuros proyectos:</p>
+
+<p data-en="&lt;strong&gt;1. Context is fragile:&lt;/strong&gt; In n8n, in any orchestration platform, data context is easily lost between nodes. Learning to use explicit references (instead of trusting that $json propagates automatically) is crucial. This cost me hours of initial debugging."><strong>1. El contexto es frágil:</strong> En n8n, en cualquier plataforma de orquestación, el contexto de datos se pierde fácilmente entre nodos.
+  Aprender a usar referencias explícitas (en lugar de confiar en que $json se propague automáticamente) es crucial. Esto me costó horas de debugging inicial.</p>
+
+<p data-en="&lt;strong&gt;2. Data design matters enormously:&lt;/strong&gt; Changing the model (pre-created to dynamic) halfway through the project was painful but valuable. The lesson: spending 2 hours designing the table and the data flow before starting to code would have saved 4 hours of refactoring later."><strong>2. El diseño de datos importa enormemente:</strong> Cambiar de modelo (pre-creado a dinámico) a mitad del proyecto fue doloroso pero valioso.
+  La lección: pasar 2 horas diseñando la tabla y el flujo de datos antes de empezar a codificar habría ahorrado 4 horas de refactorización después.</p>
+
+<p data-en="&lt;strong&gt;3. Latency is perceptible:&lt;/strong&gt; 2 seconds of total latency feels natural. 4-5 seconds is already noticeable. If each step of the pipeline (STT, LLM, TTS) is slow, it adds up. Choosing Deepgram Flux over a generic STT was crucial. Choosing ElevenLabs Turbo over a slower synthesis was crucial."><strong>3. La latencia es perceptible:</strong> 2 segundos de latencia total se siente natural. 4-5 segundos ya se empieza a notar. Si cada paso
+  del pipeline (STT, LLM, TTS) es lento, acumula. Elegir Deepgram Flux en lugar de un STT genérico fue crucial. Eleigir ElevenLabs Turbo en lugar
+  de una síntesis más lenta fue crucial.</p>
+
+<p data-en="&lt;strong&gt;4. The system prompt must be specific but flexible:&lt;/strong&gt; The System Prompt is where the intelligence lives. If it's too generic, the agent doesn't handle specific cases (what if someone says &quot;I want a big table&quot;). If it's too specific and rigid, it sounds like a robotic form. Finding the balance requires iterative testing."><strong>4. El sistema prompt debe ser específico pero flexible:</strong> El System Prompt es donde vive la inteligencia. Si es demasiado genérico,
+  el agente no maneja casos específicos (qué pasa si alguien dice "quiero una mesa grande"). Si es demasiado específico y rígido, suena como un formulario
+  robotizado. Encontrar el balance requiere pruebas iterativas.</p>
+
+<p data-en="&lt;strong&gt;5. Phone numbers are surprisingly complex:&lt;/strong&gt; Normalizing them is tedious. You have to handle country codes, spaces, international format, local format. My solution (instructing the LLM in the prompt) is a hack, but effective for Spanish. For a serious production system, I'd use a normalization library like libphonenumber."><strong>5. Los números de teléfono son sorprendentemente complejos:</strong> Normalizarlos es tedioso. Hay que manejar códigos de país, espacios,
+  formato internacional, formato local. Mi solución (instruir al LLM en el prompt) es un hack, pero efectivo para español. Para un sistema en producción
+  serio, usaría una librería de normalización como libphonenumber.</p>
+
+<h2 data-en="Current performance metrics">Métricas de rendimiento actuales</h2>
+
+<p data-en="The system is in production and I've run several real tests. Here are the numbers:">El sistema está en producción y he hecho varias pruebas reales. Aquí están los números:</p>
+
+<p data-en="&lt;strong&gt;Round-trip latency:&lt;/strong&gt; ~2 seconds. Breakdown: Deepgram STT 100ms + GPT-4o mini LLM 390ms + ElevenLabs TTS 400ms + network propagation 300ms + buffer margin 9000ms = ~2 seconds. This is what the customer waits between finishing speaking and the agent starting to respond."><strong>Latencia de ida y vuelta (round-trip):</strong> ~2 segundos. Desglosado: STT Deepgram 100ms + LLM GPT-4o mini 390ms + TTS ElevenLabs 400ms +
+  propagación de red 300ms + margen de buffer 9000ms = ~2 segundos. Esto es lo que espera el cliente entre que termina de hablar y el agente empieza a responder.</p>
+
+<p data-en="&lt;strong&gt;Function execution latency (check_availability):&lt;/strong&gt; ~1 second. From when Vapi decides to run the tool until n8n responds with the result. It includes: payload serialization (~50ms) + HTTPS request (~200ms) + SQL query in MariaDB (~100ms) + processing in n8n (~300ms) + response back (~200ms) + deserialization (~150ms)."><strong>Latencia de ejecución de función (check_availability):</strong> ~1 segundo. Desde que Vapi decide ejecutar la tool, hasta que n8n
+  responde con el resultado. Incluye: serialización del payload (~50ms) + request HTTPS (~200ms) + query SQL en MariaDB (~100ms) +
+  procesamiento en n8n (~300ms) + respuesta de vuelta (~200ms) + desserialización (~150ms).</p>
+
+<p data-en="&lt;strong&gt;Total confirmed-booking latency:&lt;/strong&gt; ~3 seconds. From when the customer confirms their details until n8n inserts into the DB and sends WhatsApp."><strong>Latencia total de reserva confirmada:</strong> ~3 segundos. Desde que el cliente confirma sus datos, hasta que n8n inserta en BD y envía WhatsApp.</p>
+
+<p data-en="&lt;strong&gt;Infrastructure:&lt;/strong&gt; 100% self-hosted on Proxmox. Intel i3-12100F machine, ~60W TDP, running 24/7. Long-term electricity cost: negligible. (for now)"><strong>Infraestructura:</strong> 100% self-hosted en Proxmox. Máquina Intel i3-12100F, ~60W TDP, corriendo 24/7. Costo de electricidad a
+  largo plazo: ignorable. (por ahora)</p>
+
+<p data-en="&lt;strong&gt;External services cost:&lt;/strong&gt; Twilio $1.15/month, Vapi (priced per call minute), Deepgram (STT), GPT-4o mini (tokens), ElevenLabs (synthesized characters). In tests, a 90-second call costs me roughly $0.30-0.50. Scalable."><strong>Costo de servicios externos:</strong> Twilio $1.15/mes, Vapi (precio por minuto de llamada), Deepgram (STT), GPT-4o mini (tokens), ElevenLabs
+  (caracteres sintetizados). En pruebas, una llamada de 90 segundos me cuesta aproximadamente $0.30-0.50. Escalable.</p>
+
+<p data-en="&lt;strong&gt;Availability:&lt;/strong&gt; As long as my Proxmox homelab is up, the webhook is up. I've had ~99.5% uptime over the last 30 days. If Proxmox goes down, there's the fallback: the call is redirected to my mobile."><strong>Disponibilidad:</strong> Mientras mi homelab en Proxmox esté arriba, el webhook está arriba. He tenido ~99.5% uptime en los últimos 30 días.
+  Si Proxmox cae, existe el fallback: la llamada se redirige a mi móvil.</p>
+
+<h2 data-en="Next phases">Próximas fases</h2>
+
+<p data-en="The core is finished and functional. The improvements I have planned for version 2:">El núcleo está terminado y funcional. Las mejoras que tengo planeadas para la versión 2:</p>
+
+<p data-en="&lt;strong&gt;Admin panel:&lt;/strong&gt; Build a dashboard in Spring Boot where the business owner can see all bookings, edit them, cancel them, without touching SQL."><strong>Panel de administración:</strong> Construir un dashboard en Spring Boot donde el propietario del negocio pueda ver todas las reservas,
+  editarlas, cancelarlas, sin tocar SQL.</p>
+
+<p data-en="&lt;strong&gt;Upgrade Twilio to paid:&lt;/strong&gt; The Twilio trial currently adds a welcome message at the start of each call. Upgrading to paid (~$20 initial deposit) would remove that."><strong>Upgrade de Twilio a pago:</strong> Twilio trial actualmente añade un mensaje de bienvenida al inicio de cada llamada.
+  Upgradear a pago (~$20 de depósito inicial) eliminaría eso.</p>
+
+<p data-en="&lt;strong&gt;Scaling to multiple tables/locations:&lt;/strong&gt; Currently the system is hardcoded for a single table. Scaling to multiple tables, multiple businesses, should be relatively simple (add a location_id field to the table, parameterize the webhook URL in Vapi)."><strong>Escalado a múltiples mesas/ubicaciones:</strong> Actualmente el sistema es hardcoded para una sola mesa. Escalar a múltiples mesas,
+  múltiples negocios, debería ser relativamente sencillo (agregar campo location_id a la tabla, parametrizar el webhook URL en Vapi).</p>
+
+<p data-en="&lt;strong&gt;Call recording:&lt;/strong&gt; Implement call audio recording for auditing and to refine the agent's prompt by observing how real people talk to it."><strong>Grabación de llamadas:</strong> Implementar grabación de audio de llamadas para auditoría y para refinar el prompt del agente observando
+  cómo las personas reales hablan con él.</p>
+
+<p data-en="&lt;strong&gt;Google Calendar integration:&lt;/strong&gt; Sync the bookings in my database with a public Google Calendar for the business, so the customer can see availability in real time."><strong>Integración con Google Calendar:</strong> Sincronizar las reservas en mi base de datos con un Google Calendar público del negocio,
+  para que el cliente vea disponibilidad en tiempo real.</p>
+
+<p data-en="&lt;strong&gt;Analytics and reports:&lt;/strong&gt; Build reports on booking patterns, peak hours, recurring customers, etc."><strong>Análisis y reportes:</strong> Construir reportes sobre patrones de reservas, horas pico, clientes recurrentes, etc.</p>
+
+<h2 data-en="Conclusion: why this matters">Conclusión: por qué esto importa</h2>
+
+<p data-en="What I built is a practical example of how AI and automation can solve real problems for small businesses, without requiring an upfront investment in expensive infrastructure. A small restaurant can't afford a full-time operator just to take bookings. But with a system like this —which costs less than $50/month in external APIs and leverages infrastructure I already owned— they can fully automate that process.">Lo que construí es un ejemplo práctico de cómo la IA y la automatización pueden resolver problemas reales de pequeños negocios,
+  sin requerir inversión inicial en infraestructura cara. Un restaurante pequeño no puede permitirse un operario full-time solo para tomar reservas.
+  Pero con un sistema como este —que cuesta menos de $50/mes en APIs externas y aprovecha infraestructura que ya poseía— pueden automatizar completamente
+  ese proceso.</p>
+
+<p data-en="The system isn't perfect. Sometimes the STT mishears a word, or the customer says something the LLM doesn't fully understand. But most of the time it works smoothly and imperceptibly. And it's good enough to solve the real-world problem: not missing calls, eliminating manual note-taking errors, confirming bookings automatically.">El sistema no es perfecto. A veces el STT malinterpreta una palabra, o el cliente dice algo que el LLM no entiende perfectamente.
+  Pero la mayoría de las veces funciona de forma fluida e imperceptible. Y es suficientemente bueno para resolver el problema del mundo real:
+  no perder llamadas, eliminar errores de anotación manual, confirmar reservas automáticamente.</p>
+
+<p data-en="Technically, I learned that coordinating multiple third-party API services with self-hosted logic is completely feasible if you design the interfaces well (webhooks, JSON formats). Latency is manageable if you choose optimized tools. And the user experience can be surprisingly natural if you invest time in the System Prompt.">Técnicamente, aprendí que coordinar múltiples servicios de API de terceros con lógica self-hosted es completamente factible si diseñas
+  bien las interfaces (webhooks, formatos JSON). La latencia es manejable si eliges herramientas optimizadas. Y la experiencia para el usuario
+  puede ser sorprendentemente natural si inviertes tiempo en el System Prompt.</p>
+
+<p data-en="I hope to fully document this, publish the code on GitHub (docker-compose.yml, SQL schema, exported n8n workflow JSON), and use it as a portfolio for future clients or employers who need similar automation.">Espero documentar esto completamente, publicar el código en GitHub (docker-compose.yml, SQL schema, n8n workflow JSON exportado),
+  y usarlo como portafolio para futuros clientes o empleadores que necesiten automatización similar.</p>
+
+</article>
+
+<aside role="complementary" aria-label="Recursos del artículo">
+
+  <div class="sidebar-box" id="toc-box">
+    <div class="toc-head">
+      <div class="sidebar-title" data-en="Contents">Índice</div>
+      <button type="button" class="lang-toggle" id="langToggle" aria-label="Switch to English">EN</button>
+    </div>
+    <div class="sidebar-item">
+      <nav aria-label="Índice del artículo">
+        <ul id="toc-list"></ul>
+      </nav>
+    </div>
+  </div>
+
+<div class="sidebar-box">
+  <div class="sidebar-title" data-en="Full stack">Stack completo</div>
+  <div class="sidebar-item">Proxmox 8 + LXC</div>
+  <div class="sidebar-item">Docker Compose 29.6</div>
+  <div class="sidebar-item">n8n latest</div>
+  <div class="sidebar-item">MariaDB 10.x</div>
+  <div class="sidebar-item">Vapi (API)</div>
+  <div class="sidebar-item">Twilio (Voice)</div>
+  <div class="sidebar-item">Deepgram (STT)</div>
+  <div class="sidebar-item">GPT-4o mini (LLM)</div>
+  <div class="sidebar-item">ElevenLabs Turbo (TTS)</div>
+  <div class="sidebar-item">Evolution API</div>
+  <div class="sidebar-item">Nginx Proxy Manager</div>
+  <div class="sidebar-item">AdGuard, WireGuard, Grafana</div>
+</div>
+
+<div class="sidebar-box">
+  <div class="sidebar-title" data-en="Domains in use">Dominios en uso</div>
+  <div class="sidebar-item">n8n.X</div>
+  <div class="sidebar-item">db.X</div>
+  <div class="sidebar-item">api.X</div>
+  <div class="sidebar-item">+1 775 256 9253 (Twilio)</div>
+  <div class="sidebar-item" data-en="(I'd rather keep the domains private for now)">(Prefiero mantener los dominios privados por ahora)</div>
+</div>
+
+<div class="sidebar-box">
+  <div class="sidebar-title" data-en="Contact">Contacto</div>
+  <form class="contact-form" id="contactForm" novalidate>
+    <div class="field">
+      <label for="cf-name" data-en="Name">Nombre</label>
+      <input type="text" id="cf-name" name="name" autocomplete="name" required
+             data-en-ph="Your name" placeholder="Tu nombre">
+    </div>
+    <div class="field">
+      <label for="cf-email" data-en="Email">Correo</label>
+      <input type="email" id="cf-email" name="email" autocomplete="email" required
+             data-en-ph="you@email.com" placeholder="tu@correo.com">
+    </div>
+    <div class="field">
+      <label for="cf-msg" data-en="Message">Mensaje</label>
+      <textarea id="cf-msg" name="message" required
+                data-en-ph="How can I help you?" placeholder="¿En qué puedo ayudarte?"></textarea>
+    </div>
+    <!-- Honeypot anti-spam (los bots lo rellenan; las personas no lo ven) -->
+    <input type="checkbox" name="botcheck" tabindex="-1" autocomplete="off" style="display:none !important" aria-hidden="true">
+    <button type="submit" class="side-btn side-btn-primary" data-en="Send">Enviar</button>
+    <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
+  </form>
+  <a class="side-btn side-btn-code" href="https://github.com/Sergio-CMDEV" target="_blank" rel="noopener noreferrer"
+     data-en="&lt;i class=&quot;fab fa-github&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; Download the code (GitHub)"><i class="fab fa-github" aria-hidden="true"></i> Descargar el código (GitHub)</a>
+</div>
+
+</aside>
+
+</div>
+
+<footer role="contentinfo">
+  <p data-en="Soporte AI is a complete personal project by Sergio CM, built in June 2026. The whole infrastructure is self-hosted, documented, and available for technical or commercial enquiries about similar automation.">Soporte AI es un proyecto personal completo de Sergio CM desarrollado en junio 2026. Toda la infraestructura está self-hosted, documentada, y disponible para consultas técnicas o comerciales sobre automatización similar.</p>
+</footer>
+
+<script>
+// Animación del favicon a partir de los frames del GIF (fallback cuando el navegador no anima GIF en favicon)
+(function(){
+  if(!window.gifuct) return;
+  const gifUrl = 'assets/images/favicon.gif';
+  fetch(gifUrl).then(r=>r.arrayBuffer()).then(buf=>{
+    try{
+      const gif = window.gifuct.parseGIF(buf);
+      const frames = window.gifuct.decompressFrames(gif, true);
+      if(!frames || !frames.length) return;
+      const width = frames[0].dims.width;
+      const height = frames[0].dims.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      const link = document.querySelector('link[rel~="icon"]') || document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+      let i = 0;
+      const frameCount = frames.length;
+      function renderFrame(idx){
+        const frame = frames[idx];
+        const imageData = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height);
+        ctx.putImageData(imageData, frame.dims.left || 0, frame.dims.top || 0);
+        try{ link.href = canvas.toDataURL('image/png'); }catch(e){}
+      }
+      renderFrame(0);
+      setInterval(()=>{ i = (i+1) % frameCount; renderFrame(i); }, 100);
+    }catch(e){ console.error('GIF favicon animation failed', e); }
+  }).catch(()=>{});
+})();
+</script>
+
+<script>
+// Índice (TOC) dinámico con resaltado de la sección activa. Copia data-en de cada título al enlace del índice.
+document.addEventListener('DOMContentLoaded', function(){
+  const article = document.querySelector('article');
+  const toc = document.getElementById('toc-list');
+  if(!article || !toc) return;
+  const headings = article.querySelectorAll('h2, h3');
+  const slug = s => s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
+
+  headings.forEach(h => {
+    if(!h.id) h.id = slug(h.textContent);
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#'+h.id;
+    a.textContent = h.textContent;
+    a.dataset.target = h.id;
+    if(h.dataset.en) a.dataset.en = h.dataset.en; // el índice también se traduce
+    if(h.tagName === 'H3') a.style.paddingLeft = '0.9rem';
+    li.appendChild(a);
+    toc.appendChild(li);
+  });
+
+  toc.addEventListener('click', function(e){
+    const a = e.target.closest('a');
+    if(!a) return;
+    e.preventDefault();
+    const target = document.getElementById(a.dataset.target);
+    if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+
+  const links = toc.querySelectorAll('a');
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(ent => {
+      if(ent.isIntersecting){
+        links.forEach(l=>l.classList.remove('active'));
+        const link = toc.querySelector('a[data-target="'+ent.target.id+'"]');
+        if(link) link.classList.add('active');
+      }
+    });
+  }, { root: null, rootMargin: '0px 0px -65% 0px', threshold: 0 });
+
+  headings.forEach(h => io.observe(h));
+});
+</script>
+
+<script>
+// Conmutador de idioma ES/EN. Para traducir un elemento, añade data-en="texto"
+// (data-en-ph="..." para placeholders, data-en-alt="..." para el alt de imágenes) junto al contenido en español.
+// Se ejecuta tras el script del índice para que los enlaces del TOC también entren.
+document.addEventListener('DOMContentLoaded', function(){
+  const btn = document.getElementById('langToggle');
+  const nodes = document.querySelectorAll('[data-en]');
+  const phNodes = document.querySelectorAll('[data-en-ph]');
+  const altNodes = document.querySelectorAll('[data-en-alt]');
+  nodes.forEach(n => { n.dataset.es = n.innerHTML; });
+  phNodes.forEach(n => { n.dataset.esPh = n.getAttribute('placeholder') || ''; });
+  altNodes.forEach(n => { n.dataset.esAlt = n.getAttribute('alt') || ''; });
+
+  function setLang(l){
+    document.documentElement.lang = l;
+    nodes.forEach(n => { n.innerHTML = (l === 'en' ? n.dataset.en : n.dataset.es); });
+    phNodes.forEach(n => { n.setAttribute('placeholder', l === 'en' ? n.dataset.enPh : n.dataset.esPh); });
+    altNodes.forEach(n => { n.setAttribute('alt', l === 'en' ? n.dataset.enAlt : n.dataset.esAlt); });
+    btn.textContent = (l === 'en' ? 'ES' : 'EN');
+    btn.setAttribute('aria-label', l === 'en' ? 'Cambiar a español' : 'Switch to English');
+    try { localStorage.setItem('lang', l); } catch(e){}
+  }
+
+  let lang = 'es';
+  try { lang = localStorage.getItem('lang') || 'es'; } catch(e){}
+  setLang(lang);
+  btn.addEventListener('click', () => setLang(document.documentElement.lang === 'en' ? 'es' : 'en'));
+});
+</script>
+
+<script>
+// Formulario de contacto -> envío directo por Web3Forms (te llega el email, sin abrir el cliente de correo).
+// 1) Regístrate gratis en https://web3forms.com con tu correo. 2) Pega aquí tu Access Key.
+(function(){
+  const form = document.getElementById('contactForm');
+  if(!form) return;
+  const ACCESS_KEY = 'PEGA_AQUI_TU_ACCESS_KEY'; // <-- reemplázalo por tu clave de web3forms.com
+  const status = document.getElementById('formStatus');
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const en = document.documentElement.lang === 'en';
+    const name = document.getElementById('cf-name').value.trim();
+    const email = document.getElementById('cf-email').value.trim();
+    const msg = document.getElementById('cf-msg').value.trim();
+
+    if(!name || !email || !msg || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){
+      status.textContent = en ? 'Please fill in all fields correctly.' : 'Rellena todos los campos correctamente.';
+      return;
+    }
+    // Honeypot: si un bot marcó la casilla oculta, abortamos en silencio.
+    if(form.botcheck && form.botcheck.checked) return;
+
+    const payload = {
+      access_key: ACCESS_KEY,
+      subject: 'Contacto Soporte AI — ' + name,
+      from_name: 'Soporte AI (web)',
+      name: name,
+      email: email,
+      message: msg
+    };
+
+    submitBtn.disabled = true;
+    status.textContent = en ? 'Sending…' : 'Enviando…';
+    try{
+      const res = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if(data.success){
+        form.reset();
+        status.textContent = en ? 'Message sent, thank you!' : 'Mensaje enviado, ¡gracias!';
+      } else {
+        status.textContent = en ? 'Something went wrong. Please try again.' : 'Algo falló. Inténtalo de nuevo.';
+      }
+    } catch(err){
+      status.textContent = en ? 'Network error. Please try again.' : 'Error de red. Inténtalo de nuevo.';
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
