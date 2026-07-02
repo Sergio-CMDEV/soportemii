@@ -28,7 +28,6 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="soporte-mii.css">
-  <script src="https://cdn.jsdelivr.net/npm/gifuct-js@1.0.2/dist/gifuct.min.js" defer></script>
 
   <!-- Schema.org (Article) para SEO enriquecido -->
   <script type="application/ld+json">
@@ -508,39 +507,6 @@ AND estado IN ('Temporal', 'Confirmada')</code>
 </footer>
 
 <script>
-// Animación del favicon a partir de los frames del GIF (fallback cuando el navegador no anima GIF en favicon)
-(function(){
-  if(!window.gifuct) return;
-  const gifUrl = 'assets/images/favicon.gif';
-  fetch(gifUrl).then(r=>r.arrayBuffer()).then(buf=>{
-    try{
-      const gif = window.gifuct.parseGIF(buf);
-      const frames = window.gifuct.decompressFrames(gif, true);
-      if(!frames || !frames.length) return;
-      const width = frames[0].dims.width;
-      const height = frames[0].dims.height;
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      const link = document.querySelector('link[rel~="icon"]') || document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-      let i = 0;
-      const frameCount = frames.length;
-      function renderFrame(idx){
-        const frame = frames[idx];
-        const imageData = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height);
-        ctx.putImageData(imageData, frame.dims.left || 0, frame.dims.top || 0);
-        try{ link.href = canvas.toDataURL('image/png'); }catch(e){}
-      }
-      renderFrame(0);
-      setInterval(()=>{ i = (i+1) % frameCount; renderFrame(i); }, 100);
-    }catch(e){ console.error('GIF favicon animation failed', e); }
-  }).catch(()=>{});
-})();
-</script>
-
-<script>
 // Índice (TOC) dinámico con resaltado de la sección activa. Copia data-en de cada título al enlace del índice.
 document.addEventListener('DOMContentLoaded', function(){
   const article = document.querySelector('article');
@@ -661,10 +627,12 @@ document.addEventListener('DOMContentLoaded', function(){
         form.reset();
         status.textContent = en ? 'Message sent, thank you!' : 'Mensaje enviado, ¡gracias!';
       } else {
-        status.textContent = en ? 'Something went wrong. Please try again.' : 'Algo falló. Inténtalo de nuevo.';
+        console.error('Web3Forms respondió sin éxito:', data);
+        status.textContent = (en ? 'Error: ' : 'Error: ') + (data.message || (en ? 'try again.' : 'inténtalo de nuevo.'));
       }
     } catch(err){
-      status.textContent = en ? 'Network error. Please try again.' : 'Error de red. Inténtalo de nuevo.';
+      console.error('Fallo al enviar a Web3Forms (¿bloqueado por AdGuard/adblocker o sin conexión?):', err);
+      status.textContent = en ? 'Network error (check adblocker/AdGuard).' : 'Error de red (revisa AdGuard/adblocker).';
     } finally {
       submitBtn.disabled = false;
     }
